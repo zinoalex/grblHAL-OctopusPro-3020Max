@@ -207,8 +207,8 @@
 
 // Define flood and mist coolant enable output pins.
 #if COOLANT_ENABLE & COOLANT_FLOOD
-#define COOLANT_FLOOD_PORT          AUXOUTPUT6_PORT
-#define COOLANT_FLOOD_PIN           AUXOUTPUT6_PIN
+#define COOLANT_FLOOD_PORT          AUXOUTPUT1_PORT // <--- Cambiato da 6 a 1 (FAN1)
+#define COOLANT_FLOOD_PIN           AUXOUTPUT1_PIN  // <--- Cambiato da 6 a 1 (FAN1)
 #endif
 #if COOLANT_ENABLE & COOLANT_MIST
 #define COOLANT_MIST_PORT           AUXOUTPUT7_PORT
