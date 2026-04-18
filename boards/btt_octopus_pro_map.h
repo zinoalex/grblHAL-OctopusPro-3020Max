@@ -121,8 +121,9 @@
 #define M5_STEP_PIN                 13
 #define M5_DIRECTION_PORT           GPIOF
 #define M5_DIRECTION_PIN            0
-#define M5_LIMIT_PORT               GPIOG
-#define M5_LIMIT_PIN                13      // MIN6
+// --- MODIFIED: Commented out to avoid conflict with STOP_5 Probe pin
+// #define M5_LIMIT_PORT               GPIOG
+// #define M5_LIMIT_PIN                13      // MIN6
 #define M5_ENABLE_PORT              GPIOF
 #define M5_ENABLE_PIN               1       // EN for M5 motor
 #endif
@@ -216,8 +217,11 @@
 
 #define AUXINPUT0_PORT              GPIOC   // Safety door - PWR-DET
 #define AUXINPUT0_PIN               0
-#define AUXINPUT1_PORT              GPIOB   // Probe - Z probe "left"
-#define AUXINPUT1_PIN               6
+
+// --- MODIFIED: Mapped to STOP_5 (PG13) for 12V tolerance
+#define AUXINPUT1_PORT              GPIOG   // Probe - STOP_5 (12V safe)
+#define AUXINPUT1_PIN               13
+
 #define AUXINPUT2_PORT              GPIOB   // Z probe "right"
 #define AUXINPUT2_PIN               7
 #define AUXINPUT3_PORT              GPIOB   //Button on PCB
