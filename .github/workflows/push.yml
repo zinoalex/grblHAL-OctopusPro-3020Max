@@ -5,38 +5,43 @@ on:
     branches:
       - master
       - ci_test
+  workflow_dispatch: # Permette di avviare l'azione anche manualmente da GitHub
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
-          submodules: 'true'
+          submodules: recursive
 
       - name: Check out panel plugin
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: dresco/Plugin_panel
           path: ./panel
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/pip
             ~/.platformio/.cache
           key: ${{ runner.os }}-pio
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
 
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
       - name: Build PlatformIO Project
-        run: pio run
+        # Compila solo l'ambiente specifico per la tua Octopus Pro per evitare errori e velocizzare
+        run: pio run -e btt_octopus_pro_h723_tmc2209_bl128
 
       - name: Archive firmware artifacts
         uses: actions/upload-artifact@v4
