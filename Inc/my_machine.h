@@ -104,7 +104,7 @@
 // -------------------------------------------------------------------------------
 //#define ETHERNET_ENABLE         1
 //#define _WIZCHIP_            5500
-//#define BLUETOOTH_ENABLE        2
+
 
 // -------------------------------------------------------------------------------
 // Optional feature plugins
@@ -118,7 +118,7 @@
 //#define LASER_OVD_ENABLE        1
 //#define LB_CLUSTERS_ENABLE      1
 //#define OPENPNP_ENABLE          1
-//#define FANS_ENABLE             1   // software M106/M107 fan control
+#define FANS_ENABLE             1   // software M106/M107 fan control
 //#define PLASMA_ENABLE           1
 
 // -------------------------------------------------------------------------------

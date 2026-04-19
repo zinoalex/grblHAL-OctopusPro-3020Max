@@ -3,11 +3,15 @@
 
   Adapted for: Genmitsu 3020 Pro Max V2 CNC
   Changes vs. upstream dresco/STM32H7xx:
-    - M5_LIMIT (STOP5 / PG13) repurposed as PROBE input (12 V tolerant, opto-isolated)
-    - COOLANT_FLOOD/MIST mapped to HE0/HE1 (high-current MOSFET outputs) for future use
-    - Board cooling fan wired directly to a 12 V breakout pin (always-on, no SW control)
-    - Laser TTL pin (PB6 / TIM4_CH1) intentionally left unassigned — see "Adding laser"
-      section in README.md
+    - Y axis direction inverted (see Y_DIRECTION_INVERT below)
+    - Limit switches: 3-pin connectors (5V / GND / signal) wired to 12V side;
+      microswitches are NC type — $5 must be set accordingly in grblHAL
+    - Emergency stop: NC dual-pole button wired in series on the power line;
+      no software E-stop pin used (hardware cut, safest approach)
+    - M5_LIMIT (STOP5 / PG13) repurposed as PROBE input (12V tolerant, opto-isolated)
+    - COOLANT_FLOOD/MIST mapped to HE0/HE1 (high-current MOSFETs) for future use
+    - Board cooling fan wired directly to a 12V breakout pin (always-on)
+    - Laser TTL pin (PB6 / TIM4_CH1) intentionally left unassigned — see README
     - TMC2209 UART pin assignments retained but flagged as untested by upstream
 
   Part of grblHAL
@@ -20,13 +24,6 @@
   terms of the GNU General Public License as published by the Free Software
   Foundation, either version 3 of the License, or (at your option) any later
   version.
-
-  grblHAL is distributed in the hope that it will be useful, but WITHOUT ANY
-  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-  A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with
-  grblHAL. If not, see <http://www.gnu.org/licenses/>.
 */
 
 #if N_ABC_MOTORS > 8
@@ -44,14 +41,14 @@
 // Serial / bus port assignment
 // -------------------------------------------------------------------------------
 // SERIAL_PORT  1  — USART1: TX=PA9,  RX=PA10  (TFT connector J70)
-//                   When USB_SERIAL_CDC=1 (our build) the USB-C port takes over
-//                   as the primary console and USART1 becomes an auxiliary UART.
+//                   When USB_SERIAL_CDC=1 the USB-C port is the primary console;
+//                   USART1 becomes an auxiliary UART.
 //
 // SERIAL1_PORT 21 — USART2: TX=PD5,  RX=PD6   (onboard ESP-12S / J26 RPi header)
-//                   Not used in this build; left mapped for future reference.
+//                   Not used in this build.
 //
-// SERIAL2_PORT 32 — USART3: TX=PD8,  RX=PD9   (Wemos D1 Mini running ESP3D)
-//                   Wemos RX -> PD8, Wemos TX -> PD9.
+// SERIAL2_PORT 32 — USART3: TX=PD8,  RX=PD9   (Wemos D1 Mini / ESP3D WebUI)
+//                   Wemos RX -> PD8,  Wemos TX -> PD9.
 //
 // I2C_PORT     1  — I2C1:   SCL=PB8, SDA=PB9  (I2C expansion header J73)
 // SPI_PORT     1  — SPI1:   SCK=PA5, MISO=PA6, MOSI=PA7
@@ -70,10 +67,10 @@
 // -------------------------------------------------------------------------------
 // Motor slot to axis mapping
 // -------------------------------------------------------------------------------
-// MOTOR0  -> X axis
-// MOTOR1  -> Y axis
-// MOTOR2_1 -> Z axis  (MOTOR2_2 left empty; parallel Z not required)
-// MOTOR3..7 -> spare  (future: 4th rotary axis, laser-Z slide, etc.)
+// MOTOR0   -> X axis
+// MOTOR1   -> Y axis   (direction inverted — see Y_DIRECTION_INVERT)
+// MOTOR2_1 -> Z axis   (MOTOR2_2 left empty; parallel Z not needed)
+// MOTOR3..7 -> spare   (future: 4th rotary axis, laser-Z slide, etc.)
 // -------------------------------------------------------------------------------
 
 // --- X axis (MOTOR0) ---
@@ -87,6 +84,11 @@
 #define X_LIMIT_PIN                 6       // STOP0 (connector J27)
 
 // --- Y axis (MOTOR1) ---
+// Direction is inverted relative to machine coordinate convention.
+// This is handled at runtime with $3 (direction port invert mask) rather than
+// at the hardware level, so the pin definitions below remain unchanged.
+// In ioSender / grblHAL console: $3=2  (bit 1 = Y axis inverted)
+// If both X and Y need inversion: $3=3
 #define Y_STEP_PORT                 GPIOG
 #define Y_STEP_PIN                  0
 #define Y_DIRECTION_PORT            GPIOG
@@ -111,7 +113,7 @@
 #define LIMIT_INMODE                GPIO_SINGLE
 
 // -------------------------------------------------------------------------------
-// Spare motor slots (declared for completeness; not used in a 3-axis CNC build)
+// Spare motor slots (not used in a 3-axis build; declared for completeness)
 // -------------------------------------------------------------------------------
 #if N_ABC_MOTORS > 0
 #define M3_AVAILABLE                        // MOTOR3
@@ -145,7 +147,7 @@
 #define M5_DIRECTION_PIN            0
 // M5_LIMIT intentionally not defined.
 // STOP5 (PG13) is repurposed as the PROBE input (AUXINPUT1).
-// If you need M5 limit, move the probe to another STOP pin and restore this.
+// To restore M5 limit, move the probe to another free STOP pin first.
 //#define M5_LIMIT_PORT               GPIOG
 //#define M5_LIMIT_PIN                13
 #define M5_ENABLE_PORT              GPIOF
@@ -183,25 +185,24 @@
 // AUXOUTPUT1 FAN1 PE5           — free
 // AUXOUTPUT2 FAN2 PD12          — free
 // AUXOUTPUT3 FAN3 PD13          — free
-// AUXOUTPUT4 FAN4 PD14          — SPINDLE_ENABLE -> drives SSR-40DD control input
+// AUXOUTPUT4 FAN4 PD14          — SPINDLE_ENABLE -> SSR-40DD control input
 // AUXOUTPUT5 FAN5 PD15          — SPINDLE_DIR    (unused; spindle is ON/OFF only)
-// AUXOUTPUT6 HE0  PA0           — COOLANT_FLOOD  (high-current MOSFET, for future pump)
-// AUXOUTPUT7 HE1  PA3           — COOLANT_MIST   (high-current MOSFET, for future valve)
+// AUXOUTPUT6 HE0  PA0           — COOLANT_FLOOD  (high-current MOSFET, future pump)
+// AUXOUTPUT7 HE1  PA3           — COOLANT_MIST   (high-current MOSFET, future valve)
 //
-// Board cooling fan: wire DIRECTLY to a 12 V breakout pin on the board.
-// This keeps the fan always-on whenever the board is powered, without
-// consuming a PWM output or requiring software control.
+// Board cooling fan: wire DIRECTLY to a 12 V breakout pin.
+// This makes the fan always-on without consuming a PWM output channel.
 // -------------------------------------------------------------------------------
-#define AUXOUTPUT0_PORT             GPIOA   // FAN0 (PA8) — reserved, do not assign
+#define AUXOUTPUT0_PORT             GPIOA   // FAN0 (PA8) — reserved for laser PWM
 #define AUXOUTPUT0_PIN              8
 
-#define AUXOUTPUT1_PORT             GPIOE   // FAN1
+#define AUXOUTPUT1_PORT             GPIOE   // FAN1 — free
 #define AUXOUTPUT1_PIN              5
 
-#define AUXOUTPUT2_PORT             GPIOD   // FAN2
+#define AUXOUTPUT2_PORT             GPIOD   // FAN2 — free
 #define AUXOUTPUT2_PIN              12
 
-#define AUXOUTPUT3_PORT             GPIOD   // FAN3
+#define AUXOUTPUT3_PORT             GPIOD   // FAN3 — free
 #define AUXOUTPUT3_PIN              13
 
 #define AUXOUTPUT4_PORT             GPIOD   // FAN4 — spindle enable (SSR-40DD)
@@ -210,24 +211,24 @@
 #define AUXOUTPUT5_PORT             GPIOD   // FAN5 — spindle direction (unused)
 #define AUXOUTPUT5_PIN              15
 
-#define AUXOUTPUT6_PORT             GPIOA   // HE0 — high-current output
+#define AUXOUTPUT6_PORT             GPIOA   // HE0 — high-current MOSFET output
 #define AUXOUTPUT6_PIN              0
 
-#define AUXOUTPUT7_PORT             GPIOA   // HE1 — high-current output
+#define AUXOUTPUT7_PORT             GPIOA   // HE1 — high-current MOSFET output
 #define AUXOUTPUT7_PIN              3
 
 // -------------------------------------------------------------------------------
 // Spindle pin binding
 // -------------------------------------------------------------------------------
-// Current setup: 48 V DC brushed spindle, ON/OFF only, driven via SSR-40DD.
-// The SSR control input (3-32 V DC) is fed from FAN4 with its voltage-select
-// jumper set to 24 V.
-// No PWM, no direction reversal needed.
-//
-// To add a PWM-capable spindle or laser later:
-//   - Define AUXOUTPUT8 pointing to PB6 (see the free-pin note at the end)
-//   - Route SPINDLE_PWM_PORT/PIN to AUXOUTPUT8
-//   - Set SPINDLE0_ENABLE=SPINDLE_PWM0 in my_machine.h and rebuild
+// Current setup: 48 V DC brushed spindle, ON/OFF only via SSR-40DD.
+// The FAN4 voltage-select jumper must be set to 24 V.
+// This design is intentional:
+//   - Simplifies wiring and commissioning
+//   - PCB routing always runs at full spindle speed
+//   - Spindle can be upgraded to a more powerful motor by changing only the PSU;
+//     the SSR-40DD relay and wiring remain unchanged
+//   - When a VFD or PWM driver is added later, only the plugin in my_machine.h
+//     and the SSR wiring need to change — this board map stays the same
 // -------------------------------------------------------------------------------
 #if DRIVER_SPINDLE_ENABLE & SPINDLE_ENA
 #define SPINDLE_ENABLE_PORT         AUXOUTPUT4_PORT
@@ -235,8 +236,8 @@
 #endif
 
 #if DRIVER_SPINDLE_ENABLE & SPINDLE_PWM
-// If PWM spindle or laser is later enabled, it will land on AUXOUTPUT0 (PA8,
-// TIM1_CH1) for a hardware PWM signal — no bit-banging.
+// If PWM spindle or laser is later enabled, it will use AUXOUTPUT0 (PA8,
+// TIM1_CH1) — a genuine hardware PWM timer channel, not bit-banged.
 #define SPINDLE_PWM_PORT            AUXOUTPUT0_PORT
 #define SPINDLE_PWM_PIN             AUXOUTPUT0_PIN
 #endif
@@ -249,10 +250,10 @@
 // -------------------------------------------------------------------------------
 // Coolant outputs
 // -------------------------------------------------------------------------------
-// Not wired on this build. Definitions kept so that M7/M8/M9 G-code commands
-// compile and map to the high-current MOSFET outputs (HE0/HE1) for future use
-// (e.g. coolant pump or air-blast solenoid). Enable COOLANT_ENABLE in
-// my_machine.h once you wire something up.
+// Not wired on this build. Definitions kept so M7/M8/M9 commands compile and
+// point to the high-current MOSFET outputs (HE0/HE1) for future expansion
+// (coolant pump, air-blast solenoid). Enable COOLANT_ENABLE in my_machine.h
+// once you physically wire something.
 // -------------------------------------------------------------------------------
 #if COOLANT_ENABLE & COOLANT_FLOOD
 #define COOLANT_FLOOD_PORT          AUXOUTPUT6_PORT
@@ -266,20 +267,28 @@
 // -------------------------------------------------------------------------------
 // Auxiliary inputs
 // -------------------------------------------------------------------------------
-// AUXINPUT0 PC0  — PWR-DET connector (free; could be used as safety door)
-// AUXINPUT1 PG13 — STOP5 -> PROBE input (opto-isolated, 12 V tolerant via EL357C)
-// AUXINPUT2 PB7  — PROBE connector right pin (secondary probe or reference)
+// AUXINPUT0 PC0  — PWR-DET connector (free; could be repurposed as safety door)
+// AUXINPUT1 PG13 — STOP5 -> PROBE input (opto-isolated EL357C, 12 V tolerant)
+// AUXINPUT2 PB7  — PROBE connector right pin (secondary probe or reference sensor)
 // AUXINPUT3 PB2  — onboard pushbutton
-// AUXINPUT4 PF3  — thermistor TB connector (free; rewired as reset if desired)
-// AUXINPUT5 PF4  — thermistor T0 connector (free; rewired as feed-hold if desired)
-// AUXINPUT6 PF5  — thermistor T1 connector (free; rewired as cycle-start if desired)
+// AUXINPUT4 PF3  — thermistor TB connector (free; rewireable as reset input)
+// AUXINPUT5 PF4  — thermistor T0 connector (free)
+// AUXINPUT6 PF5  — thermistor T1 connector (free)
+//
+// Emergency stop:
+//   A NC dual-pole pushbutton is wired in series on the mains / DC power line.
+//   This is a hardware cut — no software E-stop pin is used. The machine loses
+//   all power instantly when the button is pressed. This is the safest approach
+//   for a CNC router and requires no firmware support.
 // -------------------------------------------------------------------------------
 #define AUXINPUT0_PORT              GPIOC
 #define AUXINPUT0_PIN               0
 
-// Probe input on STOP5 — 12 V tolerant through the onboard opto-coupler path.
-// Wiring: one alligator clip on the tool shank (through collet), the other on
-// a metal reference plate on the work surface. Continuity triggers the probe.
+// Probe on STOP5. The 3-pin connector provides 5V / GND / signal (PG13).
+// The signal wire is pulled to the opto-coupler input which tolerates up to 12 V.
+// Wiring: alligator clip on tool shank -> one conductor -> GND pin of connector.
+//         metal reference plate on workpiece -> other conductor -> PG13 pin.
+// When tool touches plate, circuit closes, PG13 is pulled low -> probe fires.
 #define AUXINPUT1_PORT              GPIOG
 #define AUXINPUT1_PIN               13
 
@@ -294,7 +303,7 @@
 #define AUXINPUT6_PORT              GPIOF
 #define AUXINPUT6_PIN               5
 
-// Analog inputs (thermistor pads reusable as ADC channels if needed)
+// Analog inputs (thermistor pads, reusable as ADC channels if needed)
 #define AUXINPUT0_ANALOG_PORT       GPIOF   // T2
 #define AUXINPUT0_ANALOG_PIN        6
 #define AUXINPUT1_ANALOG_PORT       GPIOF   // T3
@@ -329,13 +338,13 @@
 // -------------------------------------------------------------------------------
 // TMC2209 UART-mode pin mapping
 // -------------------------------------------------------------------------------
-// Each TMC2209 exposes a single-wire UART pin on the driver socket "MS3" row.
-// The physical jumpers under each driver must be configured for UART mode as
-// described in the BTT Octopus Pro manual (section 3.2).
+// Each TMC2209 exposes a single-wire UART on the driver socket "MS3" row.
+// The jumpers under each driver must be configured for UART mode per the
+// BTT Octopus Pro manual (section 3.2).
 //
 // NOTE: upstream marks this path "Not tested, use with care". If you experience
-// communication errors at startup ($338 / M122), refer to the Troubleshooting
-// section in README.md. The SPI fallback paths are retained below.
+// communication errors at startup, refer to the Troubleshooting section in
+// README.md. The SPI fallback paths are retained below.
 // -------------------------------------------------------------------------------
 #if TRINAMIC_UART_ENABLE
 
@@ -416,21 +425,18 @@
 #define CAN_TX_PIN                  1
 
 // -------------------------------------------------------------------------------
-// Free pin: PB6 (PROBE connector, left pin)
+// Free pin: PB6 (PROBE connector left pin / J43)
 // -------------------------------------------------------------------------------
-// PB6 is the left signal pin of the dedicated PROBE/BLTouch connector (J43).
-// It is NOT opto-isolated (unlike PG13 / AUXINPUT1).
-// It supports hardware PWM via TIM4_CH1 on the STM32H723.
-//
+// PB6 is NOT opto-isolated (unlike PG13 / AUXINPUT1).
+// Supports hardware PWM via TIM4_CH1 on the STM32H723.
 // Reserved use: 5 V TTL laser modulation input.
 //
-// To enable (see README "Adding a laser" for full procedure):
-//   1. Add here:
-//        #define AUXOUTPUT8_PORT   GPIOB
-//        #define AUXOUTPUT8_PIN    6
+// To enable (see README "Adding a laser later" for the full procedure):
+//   1. Add:  #define AUXOUTPUT8_PORT GPIOB
+//            #define AUXOUTPUT8_PIN  6
 //   2. Redirect the SPINDLE_PWM guard to AUXOUTPUT8
 //   3. Set SPINDLE0_ENABLE=SPINDLE_PWM0 in my_machine.h
-//   4. Rebuild and set $32=1 (laser mode) in ioSender
+//   4. Rebuild, re-flash, then set $32=1 in ioSender
 // -------------------------------------------------------------------------------
 
 // EOF
