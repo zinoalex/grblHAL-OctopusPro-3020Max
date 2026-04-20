@@ -41,7 +41,7 @@ jobs:
 
       - name: Build PlatformIO Project
         # Compila solo l'ambiente specifico per la tua Octopus Pro per evitare errori e velocizzare
-        run: pio run -e btt_octopus_pro_h723_tmc2209_bl128
+        run: pio run -e octopus_pro_3020max
 
       - name: Archive firmware artifacts
         uses: actions/upload-artifact@v4
