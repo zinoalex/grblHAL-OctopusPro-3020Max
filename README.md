@@ -32,16 +32,17 @@ conversion was designed with scalability in mind:
 ## Table of Contents
 
 1. [Setup overview](#setup-overview)
-2. [Complete pin map](#complete-pin-map)
-3. [Hardware wiring diagrams](#hardware-wiring-diagrams)
-4. [Octopus Pro jumper settings](#octopus-pro-jumper-settings)
-5. [Building the firmware](#building-the-firmware)
-6. [Flashing the board](#flashing-the-board)
-7. [ESP3D setup on the Wemos D1 Mini](#esp3d-setup-on-the-wemos-d1-mini)
-8. [ioSender setup](#iosender-setup)
-9. [Initial grblHAL settings](#initial-grblhal-settings)
-10. [Adding a laser later](#adding-a-laser-later)
-11. [Troubleshooting](#troubleshooting)
+2. [Board reference](#board-reference)
+3. [Complete pin map](#complete-pin-map)
+4. [Hardware wiring diagrams](#hardware-wiring-diagrams)
+5. [Octopus Pro jumper settings](#octopus-pro-jumper-settings)
+6. [Building the firmware](#building-the-firmware)
+7. [Flashing the board](#flashing-the-board)
+8. [ESP3D setup on the Wemos D1 Mini](#esp3d-setup-on-the-wemos-d1-mini)
+9. [ioSender setup](#iosender-setup)
+10. [Initial grblHAL settings](#initial-grblhal-settings)
+11. [Adding a laser later](#adding-a-laser-later)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -59,7 +60,7 @@ conversion was designed with scalability in mind:
 | Probe / tool setter | Continuity clip + metal reference plate | On STOP5 (PG13), opto-isolated, 12 V tolerant |
 | Board cooling fan | 12 V on FAN1 (PE5) | Controlled via M106 (on) / M107 (off) |
 | PC console | USB-C → ioSender | Virtual COM port, 115200 baud |
-| WiFi WebUI | Wemos D1 Mini + ESP3D | Wired to USART3 (PD8 / PD9) |
+| WiFi WebUI | Wemos D1 Mini + ESP3D | Wired to USART3 (PD8 / PD9) — WebUI served by ESP3D |
 | Future | 5 V TTL laser module | PB6 (PROBE connector left pin) reserved |
 
 ### Intended use cases
@@ -78,6 +79,27 @@ The spindle is intentionally wired as a simple ON/OFF output through the SSR-40D
 - When a VFD or PWM motor controller is added in the future, only the plugin
   selection in `Inc/my_machine.h` and the physical wiring to the new controller
   need to change — the board map stays the same
+
+### WebUI architecture
+
+The WebUI is served **entirely by ESP3D running on the Wemos D1 Mini**. From
+grblHAL's perspective, the Wemos is simply a device connected to USART3 that
+forwards G-code commands over serial. No networking stack (lwIP, TCP/IP) runs
+on the STM32 — only `SERIAL2_ENABLE=1` and `SDCARD_ENABLE=1` are required in
+`my_machine.h`. This keeps the firmware lean and avoids Ethernet-related
+dependencies that the Octopus Pro does not support onboard.
+
+---
+
+## Board reference
+
+### BTT Octopus Pro v1.1 pinout
+
+![BTT Octopus Pro v1.1 pinout](docs/octopus_pro_v11_pinout.jpg)
+
+### Wemos D1 Mini pinout
+
+![Wemos D1 Mini pinout](docs/wemos_d1_mini_pinout.jpg)
 
 ---
 
@@ -257,6 +279,10 @@ Enable the probe in firmware: uncomment `#define PROBE_ENABLE 1` in
 
 TX/RX crossover: transmit of one side connects to receive of the other.
 
+> **Note:** ESP3D on the Wemos acts as a WiFi-to-serial bridge and serves the
+> WebUI itself. grblHAL sees the Wemos as a plain serial device on USART3 —
+> no networking stack runs on the STM32.
+
 ---
 
 ## Octopus Pro jumper settings
@@ -297,12 +323,11 @@ We use physical NC microswitches for homing. **Leave all DIAG jumpers unplugged.
 1. Open **http://svn.io-engineering.com:8080/**
 2. Processor: **STM32H7xx** — Board: **BTT Octopus Pro (H723)**
 3. Driver: **TMC2209**
-4. Plugins: **SD card**, **WebUI**, **EEPROM**, enable **Serial2**
+4. Plugins: **SD card**, **EEPROM**, enable **Serial2**, **Fans**
 5. Click **Generate** → extract `firmware.bin` from the downloaded zip
 
-> **Limitation:** the web builder uses the upstream dresco board map, which
-> does not include the customisations in this repo (NC endstop notes, probe on
-> STOP5, fan on FAN1, laser pin reserved). Use Option B for personalised builds.
+> **Limitation:** the web builder uses the upstream dresco board map. Use
+> Option B for fully customised builds (fan on FAN1, probe on STOP5, etc.).
 
 ### Option B — PlatformIO (recommended for custom builds)
 
@@ -380,6 +405,9 @@ Download the binary from https://github.com/luc-github/ESP3D/releases
 Find the assigned IP from your router's admin page, then open
 `http://<wemos_ip>` to access the WebUI.
 
+> The WebUI and all file serving run on the Wemos/ESP3D. The STM32 firmware
+> only needs to keep USART3 open at 115200 baud to exchange G-code with it.
+
 ---
 
 ## ioSender setup
@@ -400,7 +428,6 @@ measured operation. Paste them in the ioSender console.
 
 ```gcode
 ; Steps per mm — verified on this machine
-; 800 steps/mm for all three axes (measured, not calculated)
 $100=800.000
 $101=800.000
 $102=800.000
@@ -420,21 +447,17 @@ $130=300.000
 $131=200.000
 $132=60.000
 
-; Limit switch logic
-; NC microswitches: closed at rest (pin LOW), open at limit (pin HIGH)
-; $5=7 inverts all three limit inputs so HIGH = triggered
+; Limit switch logic — NC microswitches require inversion
 $5=7
 
 ; Hard limits and soft limits
 $21=1
 $20=1
 
-; Axis direction inversion
-; Y axis is mechanically inverted on this machine — bit 1 = Y
+; Axis direction inversion — Y axis mechanically inverted
 $3=2
 
 ; Homing
-; $23: bit mask, 1 = home toward negative, 0 = toward positive — adjust to your machine
 $23=3
 $22=1
 $25=500.000
@@ -446,9 +469,7 @@ $30=1000
 $31=0
 $32=0
 
-; TMC2209 motor current (mA RMS)
-; NEMA17 on this machine — 800 mA RMS is a safe starting point
-; Increase in steps of 100 mA if you get missed steps under load
+; TMC2209 motor current (mA RMS) — safe starting point for NEMA17
 $338=7
 $200=800
 $201=800
@@ -457,8 +478,8 @@ $202=800
 
 ### Fan port assignment (first flash only)
 
-The fans plugin (M106/M107) assigns the physical pin at runtime via the ioports
-system. After the first flash, you must map the correct aux output port to Fan 0:
+The fans plugin assigns the physical pin at runtime via the ioports system.
+After the first flash you must map the correct aux output port to Fan 0:
 
 ```
 1. In ioSender console, run:  $pins
@@ -574,12 +595,16 @@ Use `M4 S<power>` for dynamic power (recommended for cutting paths).
 - Use short wires from the 5 V breakout pin
 - Avoid placing the Wemos inside a metal enclosure
 
-### WebUI loads but SD files are not visible
+### WebUI not reachable
 
-- Verify `SDCARD_ENABLE=1` and `FTP_ENABLE=1` are both active at build time
-- `FTP_ENABLE` is auto-enabled by the `#if WEBUI_ENABLE` block in `my_machine.h`
-- If the issue persists, check that `OVERRIDE_MY_MACHINE` is **not** defined
-  in `platformio.ini` — if it is, `my_machine.h` is silently ignored
+- Verify ESP3D serial baud rate is 115200 (must match grblHAL USART3)
+- Check TX/RX crossover: Wemos TX → Octopus PD9 (RX), Wemos RX → Octopus PD8 (TX)
+- The WebUI is served by the Wemos — connect to the Wemos IP, not the board
+
+### SD files not visible in WebUI
+
+- Verify `SDCARD_ENABLE=1` is active at build time
+- Check that `OVERRIDE_MY_MACHINE` is **not** defined in `platformio.ini`
 
 ---
 
