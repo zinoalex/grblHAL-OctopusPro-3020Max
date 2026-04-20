@@ -83,7 +83,7 @@
 // SDCARD_ENABLE=1 : required — WebUI serves files from the SD card
 // SERIAL2_ENABLE=1: opens USART3 in the grblHAL HAL layer
 // -------------------------------------------------------------------------------
-#define WEBUI_ENABLE            3
+//#define WEBUI_ENABLE            3
 #define SDCARD_ENABLE           1
 #define SERIAL2_ENABLE          1
 
@@ -197,13 +197,7 @@
 // The network settings below only apply when ETHERNET_ENABLE is used
 // (which it is not on this board). IP/hostname are handled by the Wemos/ESP3D.
 // -------------------------------------------------------------------------------
-#if ETHERNET_ENABLE || WEBUI_ENABLE
-#define TELNET_ENABLE           1
-#define WEBSOCKET_ENABLE        1
-#define HTTP_ENABLE             1
-//#define MDNS_ENABLE           1
-//#define SSDP_ENABLE           1
-//#define MQTT_ENABLE           1
+        
 #if SDCARD_ENABLE || WEBUI_ENABLE
 #define FTP_ENABLE              1
 //#define WEBDAV_ENABLE         1
@@ -221,4 +215,4 @@
 #else
 //#define NETWORK_WEBSOCKET_PORT  80
 #endif
-#endif
+
