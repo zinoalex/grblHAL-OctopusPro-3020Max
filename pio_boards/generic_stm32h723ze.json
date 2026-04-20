@@ -6,6 +6,11 @@
     "mcu": "stm32h723zet6",
     "product_line": "STM32H723xx"
   },
+  "debug": {
+    "jlink_device": "STM32H723ZE",
+    "openocd_target": "stm32h7x",
+    "svd_path": "STM32H723.svd"
+  },
   "frameworks": ["stm32cube"],
   "name": "Generic STM32H723ZE",
   "upload": {
